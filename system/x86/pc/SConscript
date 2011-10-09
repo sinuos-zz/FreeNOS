@@ -1,0 +1,51 @@
+#
+# Copyright (C) 2010 Niek Linnenbank
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+import phony
+Import('build_env')
+
+#
+# Build the x86/pc kernel.
+#
+env = build_env.Clone()
+env.UseLibraries([ 'libc', 'libposix', 'libboot' ])
+env.BootImage('#${BUILDROOT}/boot.img', '#system/x86/pc/config/boot_image.conf')
+env.Binary('boot_image.c', '#${BUILDROOT}/boot.img')
+env.Program('kernel', [ Glob('*.c'),
+			Glob('*.S') ])
+
+#
+# Make a bootable LiveCD.
+#
+cd = env.ISO('#${BUILDROOT}/boot.iso',
+           [ '#system/x86/pc/config/cd.img',
+             '#system/x86/pc/config/grub.cfg',
+             '#${BUILDROOT}/system/kernel',
+             '#${BUILDROOT}/boot.img' ])
+
+# Shortcut to build the ISO.
+Alias('iso', cd)
+
+#
+# Register phony targets.
+#
+phony.Targets(qemu  = 'qemu -cdrom ' + build_env['BUILDROOT'] +
+	    	      '/boot.iso -smp 4 -m 64 -nographic',
+	      qemu_debug  = 'qemu -cdrom ' + build_env['BUILDROOT'] +
+	    		    '/boot.iso -smp 2 -m 64 -serial stdio -s -S -d cpu_reset,int',
+	      qemu_debug1 = 'qemu -cdrom ' + build_env['BUILDROOT'] +
+	    		    '/boot.iso -smp 1 -m 64 -serial stdio -s -S -d cpu_reset,int')

@@ -26,13 +26,10 @@ int HelpCommand::execute(Size nparams, char **params)
 
     for (HashIterator<String, ShellCommand> i(&commands); i.hasNext(); i++)
     {
-	printf("%s -- %s\r\n", i.current()->getName(), i.current()->help());
+        printf("%s -- %s\r\n", i.current()->getName(), i.current()->help());
     }
     printf("\r\n");
     printf("Type 'ls /bin' to see available user commands\r\n");
-    printf("Type 'ls /sbin' to see available system commands\r\n");
-    
+
     return 0;
 }
-
-INITOBJ(HelpCommand, helpCmd, LIBCRT_DEFAULT)

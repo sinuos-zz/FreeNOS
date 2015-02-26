@@ -16,10 +16,10 @@
  */
 
 #include <API/IPCMessage.h>
-#include <FreeNOS/Memory.h>
+#include <Arch/Memory.h>
 #include <ProcessServer.h>
 #include <ProcessMessage.h>
-#include <Config.h>
+#include <ProcessID.h>
 #include <Types.h>
 #include <string.h>
 #include <errno.h>

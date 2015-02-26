@@ -23,7 +23,7 @@
  * @{    
  */
 
-#include <Version.h>
+#include <FreeNOS/Config.h>
 #include <Device.h>
 #include <Macros.h>
 #include <Types.h>
@@ -34,7 +34,7 @@
  * @brief Print this banner per default on new Terminals. 
  */
 #define BANNER \
-    "FreeNOS " RELEASE " (" BUILDUSER "@" BUILDHOST ") (" COMPILER ") " DATETIME "\r\n"
+    "FreeNOS " RELEASE " [" ARCH "/" SYSTEM "] (" BUILDUSER "@" BUILDHOST ") (" COMPILER_VERSION ") " DATETIME "\r\n"
 
 /**
  * @brief A Terminal enables user to interact with the system.

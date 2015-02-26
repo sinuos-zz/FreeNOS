@@ -17,7 +17,13 @@
 
 #include <TerminalCodes.h>
 #include "Shell.h"
+#include "ChangeDirCommand.h"
+#include "ExitCommand.h"
+#include "StdioCommand.h"
+#include "WriteCommand.h"
+#include "HelpCommand.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
@@ -25,6 +31,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+
+Shell::Shell()
+{
+    /* Create command objects. They will register
+     * themselves in the ShellCommand class. */
+    new ChangeDirCommand();
+    new ExitCommand();
+    new StdioCommand();
+    new WriteCommand();
+    new HelpCommand();
+}
 
 int Shell::run()
 {
@@ -65,7 +82,11 @@ int Shell::execute(char *command)
     }
     /* Attempt to extract arguments. */
     argc = parse(command, argv, MAX_ARGV);
-	
+
+    /* Ignore comments */
+    if (argv[0][0] == '#')
+        return EXIT_SUCCESS;
+
     /* Do we have a matching ShellCommand? */
     if (!(cmd = ShellCommand::byName(argv[0])))
     {
@@ -76,10 +97,8 @@ int Shell::execute(char *command)
 	    return status;
 	}
 	/* Try to find it on the livecd filesystem. (temporary hardcoded PATH) */
-	else if ((snprintf(tmp, sizeof(tmp), "/bin/%s/%s",  argv[0], argv[0]) &&
-	        ((pid = forkexec(tmp, (const char **) argv)) >= 0)) ||
-		 (snprintf(tmp, sizeof(tmp), "/sbin/%s/%s", argv[0], argv[0]) &&
-	        ((pid = forkexec(tmp, (const char **) argv)) >= 0)))
+	else if (snprintf(tmp, sizeof(tmp), "/bin/%s",  argv[0], argv[0]) &&
+	        (pid = forkexec(tmp, (const char **) argv)) >= 0)
 	{
 	    waitpid(pid, &status, 0);
 	    return status;

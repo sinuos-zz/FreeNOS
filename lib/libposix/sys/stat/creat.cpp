@@ -19,8 +19,8 @@
 #include <FileSystemMessage.h>
 #include <FileType.h>
 #include <FileMode.h>
-#include <Config.h>
-#include "POSIXSupport.h"
+#include <ProcessID.h>
+#include "Runtime.h"
 #include <errno.h>
 #include "sys/stat.h"
 

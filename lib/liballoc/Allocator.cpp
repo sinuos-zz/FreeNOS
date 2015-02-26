@@ -15,6 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <Arch/Memory.h>
 #include <Macros.h>
 #include "Allocator.h"
 
@@ -26,4 +27,14 @@ Allocator::Allocator() : parent(ZERO)
 
 Allocator::~Allocator()
 {
+}
+
+Address Allocator::aligned(Address input)
+{
+    Address corrected = input;
+
+    if (input % MEMALIGN)
+	corrected += MEMALIGN - (input % MEMALIGN);
+    
+    return corrected;
 }

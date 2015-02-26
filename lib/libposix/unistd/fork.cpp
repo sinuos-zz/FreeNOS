@@ -18,8 +18,8 @@
 #include <API/IPCMessage.h>
 #include <ProcessServer.h>
 #include <FileDescriptor.h>
-#include <Config.h>
-#include "POSIXSupport.h"
+#include <ProcessID.h>
+#include "Runtime.h"
 #include <errno.h>
 #include "unistd.h"
 
@@ -42,7 +42,7 @@ pid_t fork(void)
     snprintf(key, sizeof(key), "%s%u", FILE_DESCRIPTOR_KEY, getpid());
 
     /* Then reload the FileDescriptor table. */
-    files.load(key, FILE_DESCRIPTOR_MAX);
+    getFiles()->load(key, FILE_DESCRIPTOR_MAX);
     
     /* Set errno. */
     errno = msg.result;

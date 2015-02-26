@@ -22,12 +22,12 @@
 #include <API/VMCopy.h>
 #include <IPCServer.h>
 #include <UserProcess.h>
-#include <Config.h>
+#include <ProcessID.h>
 #include <Shared.h>
 #include <Array.h>
 #include <HashTable.h>
 #include <HashIterator.h>
-#include <POSIXSupport.h>
+#include <Runtime.h>
 #include "Directory.h"
 #include "File.h"
 #include "FileSystemPath.h"
@@ -35,6 +35,7 @@
 #include "FileSystemMount.h"
 #include "FileDescriptor.h"
 #include <unistd.h>
+#include <stdlib.h>
 
 /**
  * Cached in-memory file.

@@ -1,6 +1,6 @@
 #
-# Copyright (C) 2009 Niek Linnenbank
-# 
+# Copyright (C) 2015 Niek Linnenbank
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -10,206 +10,135 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-from SCons.Script import *
-import os
 import os.path
-import shutil
-import configure
+import config
+from SCons.Script import *
+from autoconf import *
 
-#
-# Allow cross compilation.
-#
+""" A list of files which are installed in the final RootFS """
+rootfs_files = []
+Export('rootfs_files')
+
+def UseLibraries(env, libs = [], arch = None):
+    """
+    Prepares a given environment, by adding library dependencies.
+    """
+    # By default exclude host. If arch filter is set, apply it.
+    if (not arch and env['ARCH'] == 'host') or (arch and env['ARCH'] != arch):
+        return
+
+    # Loop all required libraries.
+    for lib in libs:
+
+        # Add them to the include and linker path.
+        env.Append(CPPPATH = [ '#lib/' + lib ])
+        env.Append(LIBPATH = [ '#' + env['BUILDROOT'] + '/lib/' + lib ])
+        env.Append(CPPFLAGS = [ '-include', 'lib/' + lib + '/Default.h' ])
+        env.Append(LIBS    = [ lib ])
+
+def UseServers(env, servers = []):
+    """
+    Prepares a given environment by adding server dependencies
+    """
+    if '#srv' not in env['CPPPATH']:
+        env.Append(CPPPATH = [ '#srv' ])
+
+    for serv in servers:
+        env.Append(CPPPATH = [ '#srv/' + serv ])
+
+def HostProgram(env, target, source):
+    if env['ARCH'] == 'host':
+	env.Program(target, source)
+
+def TargetProgram(env, target, source, install_dir = None):
+    if env['ARCH'] != 'host':
+	env.Program(target, source)
+	env.TargetInstall(target, install_dir)
+
+def TargetLibrary(env, lib, source):
+    if env['ARCH'] != 'host':
+	env.Library(lib, source)
+
+def CopyStrFunc(target, source, env):
+    return "  " + env.subst_target_source("COPY $SOURCE => $TARGET", 0, target, source)
+
+def DirStrFunc(target):
+    return "  MKDIR " + target
+
+def TargetInstall(env, source, target = None):
+    if env['ARCH'] != 'host':
+	SCons.Tool.install.install_action.strfunction = CopyStrFunc
+
+	if not target:
+	    target = '${ROOTFS}/' + Dir('.').srcnode().path
+
+	env.Install(target, source)
+	rootfs_files.append(str(target) + os.sep + os.path.basename(source))
+
+def SubDirectories():
+    dir_list = []
+    dir_src  = Dir('.').srcnode().abspath
+
+    if dir_src:
+	for f in os.listdir(dir_src):
+	    if os.path.isdir(dir_src + os.sep + f):
+		dir_list.append(f)
+
+	SConscript( dirs = dir_list )
+
+Export('SubDirectories')
+
+# Create target, host and kernel environments.
+host = Environment()
+host.AddMethod(HostProgram, "HostProgram")
+host.AddMethod(TargetProgram, "TargetProgram")
+host.AddMethod(TargetLibrary, "TargetLibrary")
+host.AddMethod(UseLibraries, "UseLibraries")
+host.AddMethod(UseServers, "UseServers")
+host.AddMethod(TargetInstall, "TargetInstall")
+host.Append(ROOTFS = '#${BUILDROOT}/rootfs')
+host.Append(ROOTFS_FILES = [])
+host.Append(bin  = '${ROOTFS}/bin',
+	    etc  = '${ROOTFS}/etc',
+	    srv  = '${ROOTFS}/srv',
+            boot = '${ROOTFS}/boot')
+
+target = host.Clone(tools    = ["default", "bootimage", "iso", "binary", "linn", "phony"],
+		    toolpath = ["site_scons"])
+
+# Apply configuration
+config.initialize(target, host, ARGUMENTS)
+config.write_header(target, 'include/Config.h')
+config.write_header(host, 'include/HostConfig.h')
+
+# Enables verbose compilation command output.
+if not target['VERBOSE']:
+    target['CXXCOMSTR']    = host['CXXCOMSTR']    = "  CXX  $TARGET"
+    target['CCCOMSTR']     = host['CCCOMSTR']     = "  CC   $TARGET"
+    target['ASCOMSTR']     = host['ASCOMSTR']     = "  AS   $TARGET"
+    target['ASPPCOMSTR']   = host['ASPPCOMSTR']   = "  AS   $TARGET"
+    target['ARCOMSTR']     = host['ARCOMSTR']     = "  AR   $TARGET"
+    target['RANLIBCOMSTR'] = host['RANLIBCOMSTR'] = "  LIB  $TARGET"
+    target['LINKCOMSTR']   = host['LINKCOMSTR']   = "  LD   $TARGET"
+    target['COPYSTR']      = host['COPYSTR']      = "  COPY $SOURCE => $TARGET"
+
+# Verify the configured CFLAGS.
+if not GetOption('clean'):
+    CheckCCFlags(target)
+    CheckCXXFlags(target)
+
+# Make a symbolic link to the system-specific headers.
 try:
-    cross = os.environ['CROSS']
-except:
-    cross = ""
-
-#
-# Command-line options for the target build chain.
-#
-targetVars = Variables()
-targetVars.AddVariables(
-    ('CC',        'Set the target C compiler to use',   cross + 'gcc'),
-    ('CXX',       'Set the target C++ compiler to use', cross + 'g++'),
-    ('LINK',      'Set the target linker to use',       cross + 'ld'),
-    ('CCFLAGS',   'Change target C compiler flags'),
-    ('CXXFLAGS',  'Change target C++ compiler flags',
-		[ '-fno-rtti', '-fno-exceptions' ]),
-    ('CPPFLAGS',  'Change target C preprocessor flags', '-Iinclude'),
-    ('LINKFLAGS', 'Change the flags for the target linker',
-		[ '--whole-archive', '-nostdlib', '-T', 'kernel/X86/user.ld', '-melf_i386' ])
-)
-
-#
-# Define the default build environment.
-#
-target = DefaultEnvironment(CPPPATH   = '.',
-		            ENV       = {'PATH' : os.environ['PATH'],
-                    	                 'TERM' : os.environ['TERM'],
-                        	         'HOME' : os.environ['HOME']},
-			    variables = targetVars)
-Help(targetVars.GenerateHelpText(target))
-
-#
-# The only target currently supported is x86.
-#
-try:
-    os.symlink("X86", "include/FreeNOS")
+    os.unlink('kernel/Arch')
 except:
     pass
 
-#
-# Perform autoconf-a-like checks on the selected target compiler chain.
-#
-if not target.GetOption('clean'):
-    configure.TryCCFlag(target, '-m32')
-    configure.TryCCFlag(target, '-fno-stack-protector')
-    configure.TryCCFlag(target, '-O0')
-    configure.TryCCFlag(target, '-g3')
-    configure.TryCCFlag(target, '-Wall')
-    configure.TryCCFlag(target, '-W')
-    configure.TryCCFlag(target, '-Wno-unused-parameter')
-    configure.TryCCFlag(target, '-fno-builtin')
-    configure.TryCCFlag(target, '-nostdinc')
-    configure.TryCCFlag(target, '-Wno-write-strings')
-    target['ASFLAGS'] = target['CCFLAGS']
-
-#
-# Command-line options for the host build chain.
-#
-hostVars = Variables()
-hostVars.AddVariables(
-    ('HOSTCC',       'Set the host C compiler to use',   'gcc'),
-    ('HOSTCXX',      'Set the host C++ compiler to use', 'g++'),
-    ('HOSTCCFLAGS',  'Change host C compiler flags',
-		[ '-O0', '-g3', '-Wall', '-Wno-write-strings' ]),
-    ('HOSTCXXFLAGS', 'Change host C++ compiler flags',
-		[ '' ]),
-    ('HOSTCPPFLAGS',  'Change host C preprocessor flags',
-		[ '-D__HOST__', '-Iinclude' ]),
-    ('HOSTLINKFLAGS', 'Change the flags for the host linker',
-		[ '' ])
-)
-
-#
-# Build environment for programs on the host system.
-#
-host = Environment(CPPPATH   = '.',
-		   CC        = '$HOSTCC',
-		   CXX       = '$HOSTCXX',
-		   CCFLAGS   = '$HOSTCCFLAGS',
-		   CXXFLAGS  = '$HOSTCXXFLAGS',
-		   CPPFLAGS  = '$HOSTCPPFLAGS',
-		   LINKFLAGS = '$HOSTLINKFLAGS',
-		   variables = hostVars)
-
-host.Append(VARIANT = 'host')
-Help(hostVars.GenerateHelpText(host))
-
-#
-# Output short command values per default, to
-# distinguish commands from compiler warnings and errors more easy.
-#
-if ARGUMENTS.get('VERBOSE') is None:
-    
-    # Target chain command strings.
-    target['CCCOMSTR']     = "  CC      $TARGET"
-    target['CXXCOMSTR']    = "  CXX     $TARGET"
-    target['ASCOMSTR']     = "  AS      $TARGET"
-    target['ASPPCOMSTR']   = "  AS      $TARGET"
-    target['LINKCOMSTR']   = "  LINK    $TARGET"
-    target['ARCOMSTR']     = "  AR      $TARGET"
-    target['RANLIBCOMSTR'] = "  RANLIB  $TARGET"
-    
-    # Host chain command strings.
-    host['CCCOMSTR']       = "  HOSTCC  $TARGET"
-    host['CXXCOMSTR']      = "  HOSTCXX $TARGET"
-    host['ASCOMSTR']       = "  HOSTAS  $TARGET"
-    host['ASPPCOMSTR']     = "  HOSTAS  $TARGET"
-    host['LINKCOMSTR']     = "  LINK    $TARGET"
-    host['ARCOMSTR']       = "  AR      $TARGET"
-    host['RANLIBCOMSTR']   = "  RANLIB  $TARGET"
-
-#
-# Build with assertion checks.
-#
-if ARGUMENTS.get('ASSERT') is not None:
-
-    target.Append(CCFLAGS = [ '-D__ASSERT__' ])
-    host.Append(  CCFLAGS = [ '-D__ASSERT__' ])
-
-# Provide help aswell.
-Help("\n"
-     "VERBOSE: output verbose build commands\n"
-     "    default: no\n")
-Help("\n"
-     "ASSERT: build with assertion checks enabled\n"
-     "    default: no\n")
-
-#
-# Prepares the given environment, using library and server dependencies.
-#
-def Prepare(env, libs = [], servers = []):
-    
-    # First create a safe copy.
-    e = env.Clone()
-
-    # Setup variant build directory, if needed.    
-    try:
-	e.VariantDir(e['VARIANT'], '.')
-    except:
-	pass
-    
-    # Loop all required libraries.
-    for lib in libs:
-        
-	# Add them to the C preprocessor include path.
-        e['CPPFLAGS'] += ' -Ilib/' + lib
-	e['CPPFLAGS'] += ' -include lib/' + lib + '/Default.h'
-	
-	# Link against the correct library variant.
-	try:
-	    e.Append(LIBPATH = [ '#lib/' + lib + '/' + e['VARIANT']])
-	except:
-	    e.Append(LIBPATH = [ '#lib/' + lib ])
-
-	e.Append(LIBS = [ lib ])
-
-    # Add servers to the system include path.
-    for srv in servers:
-	e['CPPFLAGS'] += ' -Isrv/' + srv
-
-    # For IPCServer.h.
-    if len(servers) > 0:
-	e['CPPFLAGS'] += ' -Isrv'
-
-    return e
-
-#
-# Adds a phony target to the given environment.
-# Also see: http://www.scons.org/wiki/PhonyTargets
-#
-def PhonyTargets(env, **kw):
-
-    for target,action in kw.items():
-        env.AlwaysBuild(env.Alias(target, [], action))
-
-#
-# Copies a file from source to destination, including parent directories.
-#
-def copyWithParents(source, dest):
-
-    # Lookup parents.
-    parent = dest + '/' + os.path.dirname(source)
-
-    # Create parent if needed. 
-    if not os.path.exists(parent):
-        os.makedirs(parent)
-
-    # Perform copy. 
-    shutil.copy(source, parent)
+try:
+    os.symlink(target['ARCH'] + os.sep + target['SYSTEM'], 'kernel/Arch')
+except:
+    pass

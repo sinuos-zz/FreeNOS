@@ -16,26 +16,34 @@
 #
 
 import os
+import os.path
 from SCons.Action import *
 
-#
-# Generate an LinnFS filesystem image.
-#
-def generateLinnFS(target=None, source=None, env=None):
+def linnfs_generate(target, source, env):
+    """
+    Generate an LinnFS filesystem image.
+    """
+    rootfs_out, ext  = os.path.splitext(str(target[0]))
+    rootfs_path = env.Dir(env['ROOTFS']).srcnode().path
 
-    os.system("srv/filesystem/linn/host/create boot/boot.linn" \
-	      " -d . -s -n 16384 -e '*.cpp' -e '*.h' -e '*.c' -e '*.o' -e 'lib*' -e 'doc' " \
-	      " -e 'SCons*' -e '*.a' -e '*.S' -e '*.ld' -e 'boot*'")
-    os.system("gzip -f boot/boot.linn")
+    os.system("build/host/srv/filesystem/linn/create " + rootfs_out + " -s -n 16384 -d " + rootfs_path)
+    os.system("gzip " + rootfs_out)
 
 #
 # Prints out a user friendly command-line string.
 #
-def generateLinnFSStr(target, source, env):
-
-    return "  LINN    boot/boot.linn.gz"
+def linnfs_string(target, source, env):
+    return "  LINN " + str(target[0])
 
 #
-# Create LinnFS Action.
+# Add ourselves to the given environment.
 #
-action  = Action(generateLinnFS, generateLinnFSStr)
+def generate(env):
+    builder = env.Builder(action = env.Action(linnfs_generate, linnfs_string))
+    env.Append(BUILDERS = { 'LinnImage' : builder })
+
+#
+# We always exist.
+#
+def exists(env):
+    return True

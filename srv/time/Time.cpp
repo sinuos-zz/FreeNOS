@@ -16,10 +16,10 @@
  */
 
 #include <API/ProcessCtl.h>
-#include <FreeNOS/CPU.h>
+#include <Arch/CPU.h>
 #include <Macros.h>
 #include <Types.h>
-#include <Config.h>
+#include <ProcessID.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>

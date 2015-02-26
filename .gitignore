@@ -1,10 +1,12 @@
 *.o
 *.a
 *.pyc
-include/Version.h
+build/
+/include/Config.h
+/include/HostConfig.h
 config.log
 .sconf_temp
 .sconsign.dblite
-boot/boot.*
-host/
-include/FreeNOS
+/kernel/Arch
+.gdbinit
+/build*.conf
